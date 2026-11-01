@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- Apple PWA ve Safari Tam Ekran Meta Etiketleri -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HAMZACHAT">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3602/3602145.png">
+    
+    <title>HAMZACHAT // Direct Pager System</title>
+    
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        /* --- GÜNDÜZ MODU (Klasik Pastel Tema) --- */
+        body {
+            background-color: #EFECE6;
+            color: #383734;
+            font-family: var(--font-sans);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 0.25rem;
+            overflow: hidden;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .pager-card {
+            background-color: #F7F5F0;
+            border: 1px solid rgba(56, 55, 52, 0.08);
+            box-shadow: 0 8px 24px rgba(56, 55, 52, 0.04);
+            transition: all 0.3s ease;
+        }
+
+        /* --- GECE MODU (Koyu Gri & Glassmorphism) --- */
+        body.dark-mode {
+            background-color: #0f1115;
+            background-image: radial-gradient(circle at 50% 0%, #1f242d 0%, #0f1115 70%);
+            color: #F3F4F6;
+        }
+
+        body.dark-mode .pager-card {
+            background-color: rgba(26, 31, 40, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        /* Alttan Yukarı Kayan Kart Animasyonu (Bottom Sheet) */
+        .bottom-sheet {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .bottom-sheet.show {
+            transform: translateY(0);
+        }
+
+        /* Buton İçi Yazılar HER İKİ MODDA DA KESİNLİKLE SİYAH */
+        button span, button i, button {
+            color: #000000 !important;
+        }
+        .force-black {
+            color: #000000 !important;
+        }
+
+        body.dark-mode .dark-text-fix {
+            color: #FFFFFF !important;
+        }
+
+        body.dark-mode .dark-input-fix {
+            background-color: rgba(37, 44, 56, 0.95) !important;
+            color: #FFFFFF !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+        }
+
+        input, textarea, button {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="w-full max-w-md h-[95vh] max-h-[720px] flex flex-col gap-1.5 relative overflow-hidden p-1.5">
+        
+        <!-- ÜST BİLGİ & KANALLAR ÇUBUĞU -->
+        <div class="pager-card rounded-xl px-2.5 py-2 flex flex-col gap-1.5 text-xs z-10">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span id="led-indicator" class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-1">
+                            <span id="my-identity" onclick="copyMyId()" class="font-mono font-bold cursor-pointer transition dark-text-fix" title="ID Kopyala">Yükleniyor...</span>
+                        </div>
+                        <span id="net-status" class="text-[9px] text-[var(--text-muted)] font-semibold">BAĞLANTI KONTROL EDİLİYOR...</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-1">
+                    <button id="theme-toggle-btn" onclick="toggleTheme()" title="Gece/Gündüz Modu" class="p-1.5 rounded-lg bg-stone-200 transition border border-stone-300 font-bold">
+                        <i id="theme-icon" class="fa-solid fa-moon text-[11px] force-black"></i>
+                    </button>
+                    <button id="notif-toggle-btn" onclick="toggleNotifications()" title="Bildirimleri Aç/Kapat" class="p-1.5 rounded-lg bg-emerald-100 transition border border-emerald-300 font-bold">
+                        <i id="notif-icon" class="fa-solid fa-bell text-[11px] force-black"></i>
+                    </button>
+                    <button onclick="clearCurrentChannelMessages()" title="Kanal Mesajlarını Temizle" class="p-1.5 rounded-lg bg-white/60 hover:bg-white transition border border-stone-300/50 font-bold">
+                        <i class="fa-solid fa-trash text-[11px] force-black"></i>
+                    </button>
+                    <button onclick="openContactsBookModal()" title="Kişi Rehberi" class="px-2 py-1 rounded-lg bg-stone-200 hover:bg-stone-300 font-bold transition border border-stone-300 text-[10px] flex items-center gap-1">
+                        <i class="fa-solid fa-address-book text-[10px] force-black"></i> <span class="force-black">Rehber</span>
+                    </button>
+                    <button id="add-contact-top-btn" onclick="openAddContactModal()" title="Kişi Ekle" class="px-2 py-1 rounded-lg bg-[#A8BBA2] hover:opacity-90 font-bold transition border border-emerald-300 text-[10px] flex items-center gap-1">
+                        <i class="fa-solid fa-user-plus text-[10px] force-black"></i> <span class="force-black">Ekle</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- HIZLI KANAL GEÇİŞİ -->
+            <div class="flex items-center justify-between gap-1 bg-black/5 p-1 rounded-lg border border-stone-300/30 overflow-x-auto hide-scrollbar">
+                <div class="flex items-center gap-1 overflow-x-auto hide-scrollbar" id="channel-tabs"></div>
+            </div>
+        </div>
+
+        <!-- ANA PAGER EKRANI -->
+        <div class="pager-card rounded-2xl p-2.5 flex-1 flex flex-col justify-between gap-2 overflow-hidden relative">
+            
+            <div class="flex justify-between items-center px-1 py-0.5 border-b border-stone-300/40 text-xs">
+                <div class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+                    <span id="active-chat-title" class="font-semibold dark-text-fix">GENEL AFET FREKANSI</span>
+                </div>
+                <div class="flex items-center gap-1.5 font-mono text-[10px] text-stone-500">
+                    <span class="dark-text-fix font-bold">UÇTAN UCA ŞİFRELİ</span>
+                </div>
+            </div>
+
+            <!-- MESAJ AKIŞ ALANI -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-2 pr-0.5 justify-end"></div>
+
+            <!-- MESAJ GİRİŞ FORMU -->
+            <div class="flex flex-col gap-1 pt-1.5 pb-1 border-t border-stone-300/40">
+                <form id="chat-form" onsubmit="handleFormSubmit(event)" class="flex items-center gap-1.5">
+                    <input type="file" id="file-input" accept="image/*" class="hidden" onchange="handleFileSelected(event)" />
+                    <button type="button" onclick="document.getElementById('file-input').click()" title="Resim Gönder" class="w-9 h-9 rounded-xl bg-stone-200 hover:bg-stone-300 flex items-center justify-center transition flex-shrink-0 border border-stone-300 font-bold">
+                        <i class="fa-solid fa-paperclip text-xs force-black"></i>
+                    </button>
+
+                    <input type="text" id="chat-input" placeholder="Afet mesajınızı yazın..." autocomplete="off"
+                           class="flex-1 bg-white border border-stone-300 rounded-xl py-2 px-3 text-xs placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400 transition shadow-xs dark-input-fix" />
+                    
+                    <button id="send-btn" type="submit" class="w-9 h-9 rounded-xl bg-[#A8BBA2] hover:opacity-90 font-bold flex items-center justify-center transition active:scale-95 flex-shrink-0 shadow-sm">
+                        <i class="fa-solid fa-paper-plane text-xs force-black"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- KİŞİ EKLEME MODALI (ALTTAN YUKARI KAYAN TOP CARD) -->
+    <div id="contact-modal" class="fixed inset-0 bg-black/60 backdrop-blur-xs hidden items-end justify-center z-50 transition-opacity">
+        <div id="contact-modal-content" class="pager-card rounded-t-3xl p-5 w-full max-w-md flex flex-col gap-3 shadow-2xl bottom-sheet">
+            <div class="w-12 h-1.5 bg-stone-400/50 rounded-full mx-auto mb-1"></div>
+            <div class="flex justify-between items-center border-b border-stone-300/30 pb-2">
+                <span class="font-bold text-xs dark-text-fix">Arkadaşını Rehbere Ekle</span>
+                <button onclick="closeAddContactModal()" class="text-stone-400 hover:text-stone-700 dark-text-fix font-bold p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex flex-col gap-1.5 text-[11px]">
+                <span class="text-stone-600 dark:text-gray-300 font-medium">Arkadaşının 4 haneli ID'sini girin:</span>
+                <input type="text" id="friend-id-input" placeholder="Örn: A8F2" maxlength="4" class="bg-white border border-stone-300 rounded-lg p-2 font-mono uppercase focus:outline-none focus:ring-1 focus:ring-stone-400 dark-input-fix" />
+                <input type="text" id="friend-name-input" placeholder="İsim / Lakap (İsteğe bağlı)" class="bg-white border border-stone-300 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-stone-400 mt-1 dark-input-fix" />
+            </div>
+            <button id="save-contact-btn" onclick="saveContact()" class="w-full py-2.5 bg-[#A8BBA2] font-bold rounded-xl text-xs hover:opacity-90 transition shadow flex items-center justify-center gap-1">
+                <span class="force-black">Rehbere Kaydet ve Bağlan</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- KİŞİ REHBERİ MODALI (ALTTAN YUKARI KAYAN TOP CARD) -->
+    <div id="contacts-book-modal" class="fixed inset-0 bg-black/60 backdrop-blur-xs hidden items-end justify-center z-50 transition-opacity">
+        <div id="contacts-book-content" class="pager-card rounded-t-3xl p-5 w-full max-w-md flex flex-col gap-3 shadow-2xl max-h-[80vh] overflow-hidden bottom-sheet">
+            <div class="w-12 h-1.5 bg-stone-400/50 rounded-full mx-auto mb-1"></div>
+            <div class="flex justify-between items-center border-b border-stone-300/30 pb-2">
+                <span class="font-bold text-xs flex items-center gap-1.5 dark-text-fix"><i class="fa-solid fa-address-book text-emerald-600 dark:text-gray-300"></i> Kişi Rehberi</span>
+                <button onclick="closeContactsBookModal()" class="text-stone-400 hover:text-stone-700 dark-text-fix font-bold p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3 top-2.5 text-[10px] text-stone-400"></i>
+                <input type="text" id="contact-search-input" oninput="filterContactsList(this.value)" placeholder="İsim veya ID ile ara..." class="w-full bg-white border border-stone-300 rounded-lg py-2 pl-8 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-stone-400 dark-input-fix" />
+            </div>
+
+            <div id="contacts-list-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 max-h-[45vh] hide-scrollbar pr-1"></div>
+
+            <button id="new-contact-modal-btn" onclick="closeContactsBookModal(); openAddContactModal();" class="w-full py-2.5 bg-[#A8BBA2] font-bold rounded-xl text-xs hover:opacity-90 transition flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-user-plus force-black"></i> <span class="force-black">Yeni Kişi Ekle</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCbUororrfe0QulrSrxaWONdOhkHaTtIBs",
+            authDomain: "pagertrk.firebaseapp.com",
+            databaseURL: "https://pagertrk-default-rtdb.firebaseio.com",
+            projectId: "pagertrk",
+            storageBucket: "pagertrk.firebasestorage.app",
+            messagingSenderId: "151073272542",
+            appId: "1:151073272542:web:7ef74267da5bf3f128884f",
+            measurementId: "G-3X4R8ST9PM"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let inboxInitialized = false;
+        let globalInitialized = false;
+
+        let currentChannel = "GLOBAL_EMERGENCY"; 
+        let activeListenerRef = null;
+        let soundEnabled = true;
+        let notificationsActive = true; 
+        
+        const renderedMessageIds = new Set();
+        const unreadMap = {}; 
+        
+        let myIdShort = localStorage.getItem('pager_my_id');
+        if (!myIdShort) {
+            myIdShort = Math.random().toString(36).substring(2, 6).toUpperCase();
+            localStorage.setItem('pager_my_id', myIdShort);
+        }
+
+        let contacts = JSON.parse(localStorage.getItem('pager_contacts') || '{}');
+        let audioCtx = null;
+
+        // GECE / GÜNDÜZ MODu YÖNETİMİ
+        function initTheme() {
+            const isDark = localStorage.getItem('pager_theme') === 'dark';
+            if (isDark) {
+                applyDarkMode(true);
+            }
+        }
+
+        function toggleTheme() {
+            initAudio();
+            const isDark = document.body.classList.toggle('dark-mode');
+            localStorage.setItem('pager_theme', isDark ? 'dark' : 'light');
+            applyDarkMode(isDark);
+            renderContactTabs();
+        }
+
+        function applyDarkMode(isDark) {
+            const themeBtn = document.getElementById('theme-toggle-btn');
+            const themeIcon = document.getElementById('theme-icon');
+            const addTopBtn = document.getElementById('add-contact-top-btn');
+            const sendBtn = document.getElementById('send-btn');
+            const saveBtn = document.getElementById('save-contact-btn');
+            const newContactBtn = document.getElementById('new-contact-modal-btn');
+
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                themeIcon.className = "fa-solid fa-sun text-[11px] text-amber-400 force-black";
+                themeBtn.className = "theme-btn-bg p-1.5 rounded-lg transition border font-bold";
+                
+                // Koyu Gri / Antrasit Butonlar (Yazıları siyah)
+                [addTopBtn, sendBtn, saveBtn, newContactBtn].forEach(btn => {
+                    if(btn) {
+                        btn.style.backgroundColor = "#4B5563"; // Koyu Gri
+                    }
+                });
+            } else {
+                document.body.classList.remove('dark-mode');
+                themeIcon.className = "fa-solid fa-moon text-[11px] force-black";
+                themeBtn.className = "p-1.5 rounded-lg bg-stone-200 transition border border-stone-300 font-bold";
+                
+                // Gündüz Pastel Butonlar
+                [addTopBtn, sendBtn, saveBtn, newContactBtn].forEach(btn => {
+                    if(btn) {
+                        btn.style.backgroundColor = "#A8BBA2";
+                    }
+                });
+            }
+        }
+
+        // BAĞLANTI KONTROLÜ
+        db.ref('.info/connected').on('value', (snap) => {
+            const led = document.getElementById('led-indicator');
+            const netStatus = document.getElementById('net-status');
+            if (snap.val() === true) {
+                led.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                netStatus.innerText = "ÇEVRİMİÇİ (BAĞLI)";
+                netStatus.className = "text-[9px] text-emerald-600 dark:text-gray-400 font-semibold";
+            } else {
+                led.className = "w-2.5 h-2.5 rounded-full bg-red-400";
+                netStatus.innerText = "ÇEVRİMDIŞI (YENİDEN BAĞLANILIYOR...)";
+                netStatus.className = "text-[9px] text-red-500 font-semibold";
+            }
+        });
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playPagerAlert() {
+            if (!soundEnabled) return;
+            initAudio();
+            try {
+                const now = audioCtx.currentTime;
+                [0, 0.12, 0.24].forEach(offset => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(2000, now + offset);
+                    gain.gain.setValueAtTime(0.06, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.06);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.06);
+                });
+            } catch (e) {}
+        }
+
+        function toggleNotifications() {
+            initAudio();
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    notificationsActive = !notificationsActive;
+                    updateNotificationButtonUI();
+                } else {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            notificationsActive = true;
+                            updateNotificationButtonUI();
+                        } else {
+                            notificationsActive = false;
+                            updateNotificationButtonUI();
+                        }
+                    });
+                }
+            }
+        }
+
+        function updateNotificationButtonUI() {
+            const btn = document.getElementById('notif-toggle-btn');
+            const icon = document.getElementById('notif-icon');
+            if (notificationsActive) {
+                btn.className = "p-1.5 rounded-lg bg-emerald-100 transition border border-emerald-300 font-bold";
+                icon.className = "fa-solid fa-bell text-[11px] force-black";
+            } else {
+                btn.className = "p-1.5 rounded-lg bg-stone-200 transition border border-stone-300 font-bold";
+                icon.className = "fa-solid fa-bell-slash text-[11px] force-black";
+            }
+        }
+
+        function triggerSystemNotification(title, bodyText) {
+            if (!notificationsActive) return; 
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body: bodyText, icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png' });
+            }
+        }
+
+        function copyMyId() { 
+            navigator.clipboard.writeText(myIdShort).then(() => alert(`Kendi Afet ID'niz kopyalandı: ${myIdShort}\n(Bu ID'yi arkadaşınıza verin)`)); 
+        }
+
+        function clearCurrentChannelMessages() {
+            initAudio();
+            const channelNameDisplay = currentChannel === "GLOBAL_EMERGENCY" ? "Genel Afet Kanalı" : "Bu Özel Hat";
+            if (confirm(`${channelNameDisplay} içerisindeki TÜM mesajlar silinecektir. Onaylıyor musunuz?`)) {
+                db.ref(`messages_${currentChannel}`).remove().then(() => {
+                    document.getElementById('chat-messages').innerHTML = '';
+                    renderedMessageIds.clear();
+                });
+            }
+        }
+
+        function encryptText(text, key) {
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return btoa(unescape(encodeURIComponent(result)));
+        }
+
+        function decryptText(cipherText, key) {
+            try {
+                let decoded = decodeURIComponent(escape(atob(cipherText)));
+                let result = '';
+                for (let i = 0; i < decoded.length; i++) {
+                    result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return result;
+            } catch (e) {
+                return "[Şifreli Veri]";
+            }
+        }
+
+        // --- RESİM GÖNDERME ---
+        function handleFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(uploadEvent) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 800;
+
+                    if (width > height && width > maxDim) {
+                        height *= maxDim / width;
+                        width = maxDim;
+                    } else if (height > maxDim) {
+                        width *= maxDim / height;
+                        height = maxDim;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    sendPayload({
+                        type: 'image',
+                        content: compressedBase64,
+                        previewText: '[Fotoğraf]'
+                    });
+                };
+                img.src = uploadEvent.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        // --- KİŞİ & REHBER YÖNETİMİ (ALTTAN YUKARI KAYAN MODALLER) ---
+        function openAddContactModal() {
+            initAudio();
+            const modal = document.getElementById('contact-modal');
+            const content = document.getElementById('contact-modal-content');
+            modal.style.display = 'flex';
+            setTimeout(() => content.classList.add('show'), 10);
+        }
+
+        function closeAddContactModal() {
+            const modal = document.getElementById('contact-modal');
+            const content = document.getElementById('contact-modal-content');
+            content.classList.remove('show');
+            setTimeout(() => modal.style.display = 'none', 300);
+        }
+
+        function openContactsBookModal() {
+            initAudio();
+            const modal = document.getElementById('contacts-book-modal');
+            const content = document.getElementById('contacts-book-content');
+            modal.style.display = 'flex';
+            setTimeout(() => content.classList.add('show'), 10);
+            document.getElementById('contact-search-input').value = '';
+            renderContactsList();
+        }
+
+        function closeContactsBookModal() {
+            const modal = document.getElementById('contacts-book-modal');
+            const content = document.getElementById('contacts-book-content');
+            content.classList.remove('show');
+            setTimeout(() => modal.style.display = 'none', 300);
+        }
+
+        function saveContact() {
+            const idInput = document.getElementById('friend-id-input').value.trim().toUpperCase();
+            const nameInput = document.getElementById('friend-name-input').value.trim() || idInput;
+            
+            if (idInput.length !== 4) {
+                alert("Lütfen 4 haneli geçerli bir ID girin.");
+                return;
+            }
+            if (idInput === myIdShort) {
+                alert("Kendinizi rehbere ekleyemezsiniz.");
+                return;
+            }
+
+            contacts[idInput] = nameInput;
+            localStorage.setItem('pager_contacts', JSON.stringify(contacts));
+            
+            closeAddContactModal();
+            document.getElementById('friend-id-input').value = '';
+            document.getElementById('friend-name-input').value = '';
+            
+            renderContactTabs();
+            switchChannel(`dm_${getDmKey(myIdShort, idInput)}`, nameInput, idInput);
+        }
+
+        function deleteContact(friendId, event) {
+            event.stopPropagation();
+            if (confirm(`"${contacts[friendId]}" kişisini rehberden silmek istediğinize emin misiniz?`)) {
+                delete contacts[friendId];
+                localStorage.setItem('pager_contacts', JSON.stringify(contacts));
+                renderContactTabs();
+                renderContactsList();
+                
+                if (currentChannel.includes(friendId)) {
+                    switchToGlobalChannel();
+                }
+            }
+        }
+
+        function renderContactsList(filterQuery = '') {
+            const container = document.getElementById('contacts-list-container');
+            let html = '';
+            
+            const entries = Object.entries(contacts);
+            if (entries.length === 0) {
+                container.innerHTML = `<div class="text-center text-stone-500 dark:text-gray-400 py-6 text-xs font-medium">Rehberinizde henüz kayıtlı kişi yok.</div>`;
+                return;
+            }
+
+            const query = filterQuery.toLowerCase();
+            let count = 0;
+            const isDark = document.body.classList.contains('dark-mode');
+
+            for (const [friendId, friendName] of entries) {
+                if (query && !friendName.toLowerCase().includes(query) && !friendId.toLowerCase().includes(query)) {
+                    continue;
+                }
+                count++;
+
+                html += `
+                    <div onclick="closeContactsBookModal(); switchChannel('dm_${getDmKey(myIdShort, friendId)}', '${friendName}', '${friendId}')" 
+                         class="flex items-center justify-between p-2.5 rounded-xl ${isDark ? 'bg-gray-800/90 border border-white/10 text-gray-100' : 'bg-white border border-stone-300 text-stone-800'} cursor-pointer transition shadow-xs">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg ${isDark ? 'bg-gray-700 text-gray-200 border border-white/10' : 'bg-[#A8BBA2] text-stone-900'} flex items-center justify-center font-bold text-xs">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="font-bold text-xs tracking-wide ${isDark ? 'text-white' : 'text-stone-900'}">${friendName}</span>
+                                <span class="font-mono text-[10px] ${isDark ? 'text-gray-300 font-semibold' : 'text-stone-500'}">ID: ${friendId}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="deleteContact('${friendId}', event)" title="Kişiyi Sil" class="p-2 rounded-lg text-stone-400 hover:text-red-500 transition">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (count === 0) {
+                html = `<div class="text-center text-stone-500 dark:text-gray-400 py-6 text-xs font-medium">Aradığınız kritere uygun kişi bulunamadı.</div>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function filterContactsList(val) {
+            renderContactsList(val);
+        }
+
+        function getDmKey(id1, id2) {
+            return [id1, id2].sort().join('_');
+        }
+
+        function renderContactTabs() {
+            const container = document.getElementById('channel-tabs');
+            let html = '';
+            const isDark = document.body.classList.contains('dark-mode');
+
+            for (const [friendId, friendName] of Object.entries(contacts)) {
+                const channelKey = `dm_${getDmKey(myIdShort, friendId)}`;
+                const isActive = currentChannel === channelKey;
+                const unreadCount = unreadMap[channelKey] || 0;
+
+                let activeClass = '';
+                if (isActive) {
+                    activeClass = isDark ? 'bg-gray-700 text-white font-bold border-gray-500 shadow' : 'bg-[#A8BBA2] text-stone-900 font-bold border-stone-400';
+                } else {
+                    activeClass = isDark ? 'bg-gray-800/80 text-gray-100 border-white/10' : 'bg-white/80 text-stone-800 border-stone-300';
+                }
+
+                html += `
+                    <button onclick="switchChannel('${channelKey}', '${friendName}', '${friendId}')" id="tab-${channelKey}" class="px-3 py-1.5 rounded-lg ${activeClass} text-[11px] flex items-center gap-1.5 border transition flex-shrink-0 relative">
+                        <i class="fa-solid fa-user text-[10px]"></i> <span class="font-bold ${isDark && !isActive ? 'text-gray-100' : ''}">${friendName}</span>
+                        ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold ml-1 animate-pulse">${unreadCount}</span>` : ''}
+                    </button>
+                `;
+            }
+
+            const globalUnread = unreadMap['GLOBAL_EMERGENCY'] || 0;
+            const globalActive = currentChannel === 'GLOBAL_EMERGENCY';
+            let globalClass = '';
+            if (globalActive) {
+                globalClass = isDark ? 'bg-gray-700/80 text-white border-gray-500 font-bold' : 'bg-red-200 text-red-900 border-red-300 font-bold';
+            } else {
+                globalClass = isDark ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-red-50 text-red-700 border-red-200';
+            }
+
+            html += `
+                <button onclick="switchToGlobalChannel()" id="tab-GLOBAL_EMERGENCY" class="px-3 py-1.5 rounded-lg ${globalClass} text-[11px] flex items-center gap-1.5 border transition flex-shrink-0 relative">
+                    <i class="fa-solid fa-tower-broadcast"></i> <span class="font-bold">GENEL AFET (SOS)</span>
+                    ${globalUnread > 0 ? `<span class="bg-red-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold ml-1 animate-bounce">${globalUnread}</span>` : ''}
+                </button>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function switchToGlobalChannel() {
+            initAudio();
+            currentChannel = "GLOBAL_EMERGENCY";
+            unreadMap['GLOBAL_EMERGENCY'] = 0; 
+            renderedMessageIds.clear();
+            document.getElementById('active-chat-title').innerText = "GENEL AFET FREKANSI (SOS)";
+            renderContactTabs();
+            switchChannelListener("messages_GLOBAL_EMERGENCY", "GLOBAL_EMERGENCY");
+        }
+
+        function switchChannel(channelKey, titleName, friendId) {
+            initAudio();
+            currentChannel = channelKey;
+            window.activeTargetFriend = friendId; 
+            window.activeTargetFriendName = titleName;
+            unreadMap[channelKey] = 0; 
+            renderedMessageIds.clear();
+            document.getElementById('active-chat-title').innerText = titleName ? `ÖZEL HAT: ${titleName}` : "ÖZEL HAT";
+            renderContactTabs();
+            switchChannelListener(`messages_${channelKey}`, channelKey);
+        }
+
+        function switchChannelListener(firebasePath, encryptionKey) {
+            document.getElementById('chat-messages').innerHTML = '';
+            if (activeListenerRef) activeListenerRef.off();
+
+            const channelOpenTime = Date.now();
+            activeListenerRef = db.ref(firebasePath);
+
+            activeListenerRef.on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                if (!msg || renderedMessageIds.has(msg.id)) return;
+                
+                renderedMessageIds.add(msg.id);
+                renderMessage(msg, encryptionKey);
+                
+                const msgTimestamp = parseInt(msg.id?.replace('msg_', '')) || 0;
+
+                if (msg.sender !== myIdShort && msgTimestamp > channelOpenTime) {
+                    playPagerAlert();
+                    const decryptedText = msg.type === 'image' ? '[Fotoğraf Alındı]' : decryptText(msg.encryptedText, encryptionKey);
+                    triggerSystemNotification(`PAGER // ${msg.sender}`, decryptedText);
+                }
+            });
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            initAudio();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            sendPayload({
+                type: 'text',
+                content: text,
+                previewText: text
+            });
+
+            input.value = '';
+        }
+
+        function sendPayload(payloadObj) {
+            const encrypted = payloadObj.type === 'text' ? encryptText(payloadObj.content, currentChannel) : payloadObj.content;
+
+            const msgObj = {
+                id: 'msg_' + Date.now(),
+                type: payloadObj.type,
+                sender: myIdShort,
+                encryptedText: encrypted,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            if (!renderedMessageIds.has(msgObj.id)) {
+                renderedMessageIds.add(msgObj.id);
+                renderMessage(msgObj, currentChannel);
+            }
+
+            db.ref(`messages_${currentChannel}`).push(msgObj);
+
+            if (currentChannel !== "GLOBAL_EMERGENCY" && window.activeTargetFriend) {
+                db.ref(`inbox_${window.activeTargetFriend}`).push({
+                    from: myIdShort,
+                    channel: currentChannel,
+                    preview: payloadObj.previewText.substring(0, 30),
+                    time: msgObj.time
+                });
+            }
+        }
+
+        function renderMessage(m, encryptionKey) {
+            const container = document.getElementById('chat-messages');
+            const isMe = m.sender === myIdShort;
+            const isDark = document.body.classList.contains('dark-mode');
+            
+            let contentHtml = '';
+            if (m.type === 'image') {
+                contentHtml = `<img src="${m.encryptedText}" class="rounded-lg max-w-full h-auto max-h-48 object-cover border border-black/10 cursor-pointer shadow" onclick="window.open(this.src)" />`;
+            } else {
+                contentHtml = decryptText(m.encryptedText, encryptionKey);
+            }
+            
+            let bubbleClass = '';
+            if (isMe) {
+                bubbleClass = isDark ? 'bg-gray-700 text-white rounded-tr-none font-medium' : 'bg-[#A8BBA2] text-stone-900 rounded-tr-none font-medium';
+            } else {
+                bubbleClass = isDark ? 'bg-gray-800 text-gray-100 rounded-tl-none font-medium border border-white/10' : 'bg-white text-stone-800 rounded-tl-none font-medium border border-stone-300';
+            }
+
+            const msgEl = document.createElement('div');
+            msgEl.className = `flex flex-col gap-0.5 max-w-[85%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`;
+            msgEl.innerHTML = `
+                <div class="text-[9px] text-stone-500 dark:text-gray-400 px-1 font-mono font-semibold"><b>${m.sender}</b> ${m.time}</div>
+                <div class="px-3 py-2 rounded-xl text-xs shadow-md ${bubbleClass}">
+                    ${contentHtml}
+                </div>
+            `;
+            container.appendChild(msgEl);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function initBackgroundPager() {
+            db.ref(`inbox_${myIdShort}`).on('child_added', (snapshot) => {
+                const data = snapshot.val();
+                if (!data || data.from === myIdShort) return;
+
+                if (data.channel && data.channel !== currentChannel) {
+                    unreadMap[data.channel] = (unreadMap[data.channel] || 0) + 1;
+                    renderContactTabs();
+                }
+
+                if (inboxInitialized) {
+                    playPagerAlert();
+                    triggerSystemNotification(`YENİ ÇAĞRI [${data.from}]`, data.preview || "Özel mesaj alındı.");
+                }
+            });
+
+            db.ref('messages_GLOBAL_EMERGENCY').on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                if (!msg || msg.sender === myIdShort) return;
+
+                if (globalInitialized && currentChannel !== 'GLOBAL_EMERGENCY') {
+                    unreadMap['GLOBAL_EMERGENCY'] = (unreadMap['GLOBAL_EMERGENCY'] || 0) + 1;
+                    renderContactTabs();
+                    playPagerAlert();
+                }
+            });
+        }
+
+        window.onload = () => {
+            initTheme();
+            document.getElementById('my-identity').innerText = `ID: ${myIdShort}`;
+
+            db.ref(`inbox_${myIdShort}`).once('value', () => {
+                inboxInitialized = true;
+            });
+            db.ref('messages_GLOBAL_EMERGENCY').once('value', () => {
+                globalInitialized = true;
+            });
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker Kaydedildi:', reg))
+                    .catch(err => console.error('Service Worker Kayıt Hatası:', err));
+            }
+
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            document.body.addEventListener('click', () => initAudio(), { once: true });
+            
+            initBackgroundPager();
+            renderContactTabs();
+            switchToGlobalChannel();
+        };
+    </script>
+</body>
+</html>
