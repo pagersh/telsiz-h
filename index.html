@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- Apple PWA ve Safari Tam Ekran Meta Etiketleri -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HAMZACHAT">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3602/3602145.png">
+    
+    <title>HAMZACHAT // Direct Pager System</title>
+    
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --pastel-bg: #EFECE6;        
+            --pastel-card: #F7F5F0;      
+            --pastel-accent: #A8BBA2;    
+            --text-dark: #383734;
+            --text-muted: #7C7A75;
+            --border-soft: rgba(56, 55, 52, 0.08);
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: var(--pastel-bg);
+            color: var(--text-dark);
+            font-family: var(--font-sans);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 0.25rem;
+            overflow: hidden;
+        }
+
+        input, textarea, button {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+        }
+
+        .pastel-card {
+            background-color: var(--pastel-card);
+            border: 1px solid var(--border-soft);
+            box-shadow: 0 8px 24px rgba(56, 55, 52, 0.04);
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="w-full max-w-md h-[95vh] max-h-[720px] flex flex-col gap-1.5 relative overflow-hidden p-1.5">
+        
+        <!-- ÜST BİLGİ & KANALLAR ÇUBUĞU -->
+        <div class="pastel-card rounded-xl px-2.5 py-2 flex flex-col gap-1.5 text-xs z-10">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span id="led-indicator" class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-1">
+                            <span id="my-identity" onclick="copyMyId()" class="font-mono font-bold text-[var(--text-dark)] cursor-pointer" title="ID Kopyala">Yükleniyor...</span>
+                        </div>
+                        <span id="net-status" class="text-[9px] text-[var(--text-muted)]">BAĞLANTI KONTROL EDİLİYOR...</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-1">
+                    <button id="notif-toggle-btn" onclick="toggleNotifications()" title="Bildirimleri Aç/Kapat" class="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 transition border border-emerald-300">
+                        <i id="notif-icon" class="fa-solid fa-bell text-[11px]"></i>
+                    </button>
+                    <button onclick="clearCurrentChannelMessages()" title="Kanal Mesajlarını Temizle" class="p-1.5 rounded-lg bg-white/60 hover:bg-white hover:text-red-500 transition border border-[var(--border-soft)]">
+                        <i class="fa-solid fa-trash text-[11px]"></i>
+                    </button>
+                    <button onclick="openContactsBookModal()" title="Kişi Rehberi" class="px-2 py-1 rounded-lg bg-stone-200 hover:bg-stone-300 text-[var(--text-dark)] font-semibold transition border border-stone-300 text-[10px] flex items-center gap-1">
+                        <i class="fa-solid fa-address-book text-[10px]"></i> Rehber
+                    </button>
+                    <button onclick="openAddContactModal()" title="Kişi Ekle" class="px-2 py-1 rounded-lg bg-[var(--pastel-accent)] hover:opacity-90 text-[var(--text-dark)] font-semibold transition border border-emerald-300 text-[10px] flex items-center gap-1">
+                        <i class="fa-solid fa-user-plus text-[10px]"></i> Ekle
+                    </button>
+                </div>
+            </div>
+
+            <!-- HIZLI KANAL GEÇİŞİ -->
+            <div class="flex items-center justify-between gap-1 bg-white/50 p-1 rounded-lg border border-[var(--border-soft)] overflow-x-auto hide-scrollbar">
+                <div class="flex items-center gap-1 overflow-x-auto hide-scrollbar" id="channel-tabs"></div>
+            </div>
+        </div>
+
+        <!-- ANA PAGER EKRANI -->
+        <div class="pastel-card rounded-2xl p-2.5 flex-1 flex flex-col justify-between gap-2 overflow-hidden relative">
+            
+            <div class="flex justify-between items-center px-1 py-0.5 border-b border-[var(--border-soft)] text-xs">
+                <div class="flex items-center gap-1">
+                    <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+                    <span id="active-chat-title" class="font-semibold text-[var(--text-dark)]">GENEL AFET FREKANSI</span>
+                </div>
+                <div class="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-muted)]">
+                    <button id="audio-call-btn" onclick="startCall(false)" class="hidden px-2 py-0.5 rounded bg-emerald-200 hover:bg-emerald-300 text-emerald-900 font-bold transition items-center gap-1">
+                        <i class="fa-solid fa-phone text-[10px]"></i> Sesli
+                    </button>
+                    <button id="video-call-btn" onclick="startCall(true)" class="hidden px-2 py-0.5 rounded bg-blue-200 hover:bg-blue-300 text-blue-900 font-bold transition items-center gap-1">
+                        <i class="fa-solid fa-video text-[10px]"></i> Görüntülü
+                    </button>
+                    <span id="net-label">UÇTAN UCA ŞİFRELİ</span>
+                </div>
+            </div>
+
+            <!-- MESAJ AKIŞ ALANI -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-2 pr-0.5 justify-end"></div>
+
+            <!-- MESAJ GİRİŞ FORMU -->
+            <div class="flex flex-col gap-1 pt-1.5 pb-1 border-t border-[var(--border-soft)]">
+                <form id="chat-form" onsubmit="handleFormSubmit(event)" class="flex items-center gap-1.5">
+                    <input type="file" id="file-input" accept="image/*" class="hidden" onchange="handleFileSelected(event)" />
+                    <button type="button" onclick="document.getElementById('file-input').click()" title="Resim Gönder" class="w-9 h-9 rounded-xl bg-stone-200 hover:bg-stone-300 text-[var(--text-dark)] flex items-center justify-center transition flex-shrink-0">
+                        <i class="fa-solid fa-paperclip text-xs"></i>
+                    </button>
+
+                    <input type="text" id="chat-input" placeholder="Afet mesajınızı yazın..." autocomplete="off"
+                           class="flex-1 bg-white border border-[var(--border-soft)] rounded-xl py-2 px-3 text-xs text-[var(--text-dark)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--pastel-accent)] transition shadow-xs" />
+                    
+                    <button type="submit" class="w-9 h-9 rounded-xl bg-[var(--pastel-accent)] hover:opacity-90 text-[var(--text-dark)] flex items-center justify-center transition active:scale-95 flex-shrink-0 shadow-sm">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- WHATSAPP TARZI SESLİ & GÖRÜNTÜLÜ ARAMA EKRANI MODALI -->
+    <div id="call-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden flex-col items-center justify-between z-50 p-4">
+        <div class="flex flex-col items-center gap-1 mt-6 z-10">
+            <span id="call-target-name" class="font-bold text-base text-white">Arama</span>
+            <span id="call-status-desc" class="text-xs font-mono text-stone-300">Bağlantı kuruluyor...</span>
+            <span id="call-timer" class="text-sm font-mono font-bold text-emerald-400 hidden">00:00</span>
+        </div>
+
+        <!-- MEDYA EKRANI -->
+        <div class="relative w-full max-w-sm flex-1 my-4 flex items-center justify-center overflow-hidden rounded-2xl bg-stone-900 border border-white/10">
+            <video id="remote-video" autoplay playsinline class="w-full h-full object-cover hidden"></video>
+            <div id="audio-call-avatar" class="w-24 h-24 rounded-full bg-emerald-500/20 border-4 border-emerald-400 flex items-center justify-center text-emerald-400 text-4xl animate-pulse">
+                <i id="call-type-icon" class="fa-solid fa-phone-volume"></i>
+            </div>
+            <video id="local-video" autoplay playsinline muted class="absolute bottom-3 right-3 w-28 h-40 object-cover rounded-xl border-2 border-white/40 shadow-lg hidden bg-black"></video>
+        </div>
+
+        <audio id="remote-audio" autoplay></audio>
+        
+        <!-- KONTROL BUTONLARI -->
+        <div class="flex items-center gap-4 mb-6 z-10">
+            <button id="mute-btn" onclick="toggleMute()" class="w-12 h-12 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition shadow" title="Sessize Al">
+                <i class="fa-solid fa-microphone text-base"></i>
+            </button>
+            <button id="camera-btn" onclick="toggleCamera()" class="w-12 h-12 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition shadow hidden" title="Kamerayı Kapat">
+                <i class="fa-solid fa-video text-base"></i>
+            </button>
+            <button onclick="endAudioCall()" class="w-14 h-14 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center transition shadow-lg">
+                <i class="fa-solid fa-phone-slash text-xl"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- KİŞİ EKLEME MODALI -->
+    <div id="contact-modal" class="fixed inset-0 bg-black/30 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+        <div class="pastel-card rounded-2xl p-4 w-full max-w-xs flex flex-col gap-3 shadow-xl">
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-xs">Arkadaşını Rehbere Ekle</span>
+                <button onclick="closeAddContactModal()" class="text-stone-400 hover:text-stone-700"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex flex-col gap-1 text-[11px]">
+                <span class="text-[var(--text-muted)]">Arkadaşının 4 haneli ID'sini girin:</span>
+                <input type="text" id="friend-id-input" placeholder="Örn: A8F2" maxlength="4" class="bg-white border border-[var(--border-soft)] rounded-lg p-2 font-mono uppercase focus:outline-none focus:ring-1 focus:ring-[var(--pastel-accent)]" />
+                <input type="text" id="friend-name-input" placeholder="İsim / Lakap (İsteğe bağlı)" class="bg-white border border-[var(--border-soft)] rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[var(--pastel-accent)] mt-1" />
+            </div>
+            <button onclick="saveContact()" class="w-full py-2 bg-[var(--pastel-accent)] font-semibold rounded-lg text-xs hover:opacity-90 transition">Rehbere Kaydet ve Bağlan</button>
+        </div>
+    </div>
+
+    <!-- KİŞİ REHBERİ MODALI -->
+    <div id="contacts-book-modal" class="fixed inset-0 bg-black/30 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+        <div class="pastel-card rounded-2xl p-4 w-full max-w-sm flex flex-col gap-3 shadow-xl max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-[var(--border-soft)] pb-2">
+                <span class="font-bold text-xs flex items-center gap-1.5"><i class="fa-solid fa-address-book text-emerald-700"></i> Kişi Rehberi</span>
+                <button onclick="closeContactsBookModal()" class="text-stone-400 hover:text-stone-700"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-2.5 top-2.5 text-[10px] text-[var(--text-muted)]"></i>
+                <input type="text" id="contact-search-input" oninput="filterContactsList(this.value)" placeholder="İsim veya ID ile ara..." class="w-full bg-white border border-[var(--border-soft)] rounded-lg py-1.5 pl-7 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--pastel-accent)]" />
+            </div>
+
+            <div id="contacts-list-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 max-h-[50vh] hide-scrollbar pr-1"></div>
+
+            <button onclick="closeContactsBookModal(); openAddContactModal();" class="w-full py-2 bg-[var(--pastel-accent)] font-semibold rounded-lg text-xs hover:opacity-90 transition flex items-center justify-center gap-1">
+                <i class="fa-solid fa-user-plus"></i> Yeni Kişi Ekle
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCbUororrfe0QulrSrxaWONdOhkHaTtIBs",
+            authDomain: "pagertrk.firebaseapp.com",
+            databaseURL: "https://pagertrk-default-rtdb.firebaseio.com",
+            projectId: "pagertrk",
+            storageBucket: "pagertrk.firebasestorage.app",
+            messagingSenderId: "151073272542",
+            appId: "1:151073272542:web:7ef74267da5bf3f128884f",
+            measurementId: "G-3X4R8ST9PM"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let inboxInitialized = false;
+        let globalInitialized = false;
+
+        let currentChannel = "GLOBAL_EMERGENCY"; 
+        let activeListenerRef = null;
+        let soundEnabled = true;
+        let notificationsActive = true; 
+        
+        const renderedMessageIds = new Set();
+        const unreadMap = {}; 
+        
+        let myIdShort = localStorage.getItem('pager_my_id');
+        if (!myIdShort) {
+            myIdShort = Math.random().toString(36).substring(2, 6).toUpperCase();
+            localStorage.setItem('pager_my_id', myIdShort);
+        }
+
+        let contacts = JSON.parse(localStorage.getItem('pager_contacts') || '{}');
+        let audioCtx = null;
+
+        // WebRTC & Call Variables
+        let peerConnection = null;
+        let localStream = null;
+        let isVideoCall = false;
+        let isMuted = false;
+        let isCameraOff = false;
+        let callTimerInterval = null;
+        let callSeconds = 0;
+        let callPromptShown = false; // Sonsuz döngü ve 50 kez sorma hatasını önleyen kilit
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        // GERÇEK ZAMANLI BAĞLANTI KONTROLÜ
+        db.ref('.info/connected').on('value', (snap) => {
+            const led = document.getElementById('led-indicator');
+            const netStatus = document.getElementById('net-status');
+            if (snap.val() === true) {
+                led.className = "w-2.5 h-2.5 rounded-full bg-[var(--pastel-accent)] animate-pulse";
+                netStatus.innerText = "ÇEVRİMİÇİ (BAĞLI)";
+            } else {
+                led.className = "w-2.5 h-2.5 rounded-full bg-red-400";
+                netStatus.innerText = "ÇEVRİMDIŞI (YENİDEN BAĞLANILIYOR...)";
+            }
+        });
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playPagerAlert() {
+            if (!soundEnabled) return;
+            initAudio();
+            try {
+                const now = audioCtx.currentTime;
+                [0, 0.12, 0.24].forEach(offset => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(2000, now + offset);
+                    gain.gain.setValueAtTime(0.06, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.06);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.06);
+                });
+            } catch (e) {}
+        }
+
+        function toggleNotifications() {
+            initAudio();
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    notificationsActive = !notificationsActive;
+                    updateNotificationButtonUI();
+                } else {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            notificationsActive = true;
+                            updateNotificationButtonUI();
+                        } else {
+                            notificationsActive = false;
+                            updateNotificationButtonUI();
+                        }
+                    });
+                }
+            }
+        }
+
+        function updateNotificationButtonUI() {
+            const btn = document.getElementById('notif-toggle-btn');
+            const icon = document.getElementById('notif-icon');
+            if (notificationsActive) {
+                btn.className = "p-1.5 rounded-lg bg-emerald-100 text-emerald-800 transition border border-emerald-300";
+                icon.className = "fa-solid fa-bell text-[11px]";
+            } else {
+                btn.className = "p-1.5 rounded-lg bg-stone-200 text-stone-500 transition border border-stone-300";
+                icon.className = "fa-solid fa-bell-slash text-[11px]";
+            }
+        }
+
+        function triggerSystemNotification(title, bodyText) {
+            if (!notificationsActive) return; 
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body: bodyText, icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png' });
+            }
+        }
+
+        function copyMyId() { 
+            navigator.clipboard.writeText(myIdShort).then(() => alert(`Kendi Afet ID'niz kopyalandı: ${myIdShort}\n(Bu ID'yi arkadaşınıza verin)`)); 
+        }
+
+        function clearCurrentChannelMessages() {
+            initAudio();
+            const channelNameDisplay = currentChannel === "GLOBAL_EMERGENCY" ? "Genel Afet Kanalı" : "Bu Özel Hat";
+            if (confirm(`${channelNameDisplay} içerisindeki TÜM mesajlar silinecektir. Onaylıyor musunuz?`)) {
+                db.ref(`messages_${currentChannel}`).remove().then(() => {
+                    document.getElementById('chat-messages').innerHTML = '';
+                    renderedMessageIds.clear();
+                });
+            }
+        }
+
+        function encryptText(text, key) {
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return btoa(unescape(encodeURIComponent(result)));
+        }
+
+        function decryptText(cipherText, key) {
+            try {
+                let decoded = decodeURIComponent(escape(atob(cipherText)));
+                let result = '';
+                for (let i = 0; i < decoded.length; i++) {
+                    result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return result;
+            } catch (e) {
+                return "[Şifreli Veri]";
+            }
+        }
+
+        // --- RESİM GÖNDERME ---
+        function handleFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(uploadEvent) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 800;
+
+                    if (width > height && width > maxDim) {
+                        height *= maxDim / width;
+                        width = maxDim;
+                    } else if (height > maxDim) {
+                        width *= maxDim / height;
+                        height = maxDim;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    sendPayload({
+                        type: 'image',
+                        content: compressedBase64,
+                        previewText: '[Fotoğraf]'
+                    });
+                };
+                img.src = uploadEvent.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        // --- SESLİ VE GÖRÜNTÜLÜ ARAMA ALTYAPISI (WEBRTC DÜZELTİLMİŞ) ---
+        function startCallTimer() {
+            callSeconds = 0;
+            const timerEl = document.getElementById('call-timer');
+            timerEl.classList.remove('hidden');
+            timerEl.innerText = "00:00";
+            if (callTimerInterval) clearInterval(callTimerInterval);
+            callTimerInterval = setInterval(() => {
+                callSeconds++;
+                const mins = Math.floor(callSeconds / 60).toString().padStart(2, '0');
+                const secs = (callSeconds % 60).toString().padStart(2, '0');
+                timerEl.innerText = `${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function stopCallTimer() {
+            if (callTimerInterval) clearInterval(callTimerInterval);
+            callTimerInterval = null;
+            document.getElementById('call-timer').classList.add('hidden');
+        }
+
+        function startCall(withVideo = false) {
+            if (currentChannel === "GLOBAL_EMERGENCY") return;
+            initAudio();
+            isVideoCall = withVideo;
+            callPromptShown = true;
+            
+            setupCallUI(true);
+            document.getElementById('call-target-name').innerText = window.activeTargetFriendName || "Kullanıcı";
+            document.getElementById('call-status-desc').innerText = "Çalıyor...";
+
+            navigator.mediaDevices.getUserMedia({ 
+                audio: true, 
+                video: withVideo ? { facingMode: "user" } : false 
+            }).then(stream => {
+                localStream = stream;
+                if (withVideo) {
+                    const localVid = document.getElementById('local-video');
+                    localVid.srcObject = stream;
+                    localVid.classList.remove('hidden');
+                }
+
+                setupPeerConnection();
+
+                peerConnection.createOffer().then(offer => {
+                    return peerConnection.setLocalDescription(offer);
+                }).then(() => {
+                    db.ref(`calls_${currentChannel}`).set({
+                        type: 'offer',
+                        sender: myIdShort,
+                        isVideo: withVideo,
+                        sdp: peerConnection.localDescription,
+                        timestamp: Date.now()
+                    });
+                });
+            }).catch(err => {
+                alert("Kamera/Mikrofon izni alınamadı! (Lütfen HTTPS kullandığınızdan ve tarayıcı izinlerinin açık olduğundan emin olun)");
+                endAudioCall();
+            });
+        }
+
+        function setupCallUI(isCaller = false) {
+            document.getElementById('call-modal').style.display = 'flex';
+            const cameraBtn = document.getElementById('camera-btn');
+            const avatar = document.getElementById('audio-call-avatar');
+            const icon = document.getElementById('call-type-icon');
+
+            if (isVideoCall) {
+                cameraBtn.classList.remove('hidden');
+                icon.className = "fa-solid fa-video";
+                avatar.classList.add('hidden');
+            } else {
+                cameraBtn.classList.add('hidden');
+                icon.className = "fa-solid fa-phone-volume";
+                avatar.classList.remove('hidden');
+                document.getElementById('local-video').classList.add('hidden');
+                document.getElementById('remote-video').classList.add('hidden');
+            }
+        }
+
+        function setupPeerConnection() {
+            if (peerConnection) return;
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            peerConnection.ontrack = event => {
+                if (isVideoCall) {
+                    const remoteVid = document.getElementById('remote-video');
+                    remoteVid.srcObject = event.streams[0];
+                    remoteVid.classList.remove('hidden');
+                    document.getElementById('audio-call-avatar').classList.add('hidden');
+                } else {
+                    const remoteAudio = document.getElementById('remote-audio');
+                    remoteAudio.srcObject = event.streams[0];
+                    remoteAudio.play().catch(e => console.log("Audio play err:", e));
+                }
+                document.getElementById('call-status-desc').innerText = "Bağlantı Kuruldu";
+                startCallTimer();
+            };
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    db.ref(`calls_${currentChannel}/candidates_${myIdShort}`).push(event.candidate.toJSON());
+                }
+            };
+        }
+
+        function listenForCalls() {
+            // Önceki dinleyicileri temizle
+            db.ref(`calls_${currentChannel}`).off();
+
+            db.ref(`calls_${currentChannel}`).on('value', async snapshot => {
+                const data = snapshot.val();
+                if (!data || data.sender === myIdShort) {
+                    callPromptShown = false;
+                    return;
+                }
+
+                // Zaten görüşmedeysek veya prompt zaten ekrandaysa tekrar açma (Döngü önlemi)
+                if (peerConnection || callPromptShown || document.getElementById('call-modal').style.display === 'flex') {
+                    return;
+                }
+
+                // 15 saniyeden eski bayat çağrıları yok say ve temizle
+                if (data.timestamp && (Date.now() - data.timestamp > 15000)) {
+                    db.ref(`calls_${currentChannel}`).remove();
+                    callPromptShown = false;
+                    return;
+                }
+
+                if (data.type === 'offer') {
+                    callPromptShown = true;
+                    const callTypeStr = data.isVideo ? "görüntülü" : "sesli";
+                    
+                    if (confirm(`${data.sender} sizi ${callTypeStr} arıyor. Kabul ediyor musunuz?`)) {
+                        initAudio();
+                        isVideoCall = !!data.isVideo;
+                        setupCallUI(false);
+                        
+                        document.getElementById('call-target-name').innerText = `Görüşme: ${data.sender}`;
+                        document.getElementById('call-status-desc').innerText = "Bağlanılıyor...";
+
+                        try {
+                            localStream = await navigator.mediaDevices.getUserMedia({ 
+                                audio: true, 
+                                video: isVideoCall ? { facingMode: "user" } : false 
+                            });
+
+                            if (isVideoCall) {
+                                const localVid = document.getElementById('local-video');
+                                localVid.srcObject = localStream;
+                                localVid.classList.remove('hidden');
+                            }
+
+                            setupPeerConnection();
+
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                            const answer = await peerConnection.createAnswer();
+                            await peerConnection.setLocalDescription(answer);
+
+                            db.ref(`calls_${currentChannel}`).update({
+                                type: 'answer',
+                                sender: myIdShort,
+                                sdp: peerConnection.localDescription,
+                                timestamp: Date.now()
+                            });
+                            startCallTimer();
+                        } catch (err) {
+                            alert("Kamera veya mikrofon izni verilmediği için arama açılamadı!");
+                            endAudioCall();
+                        }
+                    } else {
+                        // Reddedildiyse Firebase'deki çağrı düğümünü tamamen sil
+                        db.ref(`calls_${currentChannel}`).remove();
+                        callPromptShown = false;
+                    }
+                } else if (data.type === 'answer' && peerConnection && peerConnection.signalingState !== 'stable') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    document.getElementById('call-status-desc').innerText = "Bağlantı Kuruldu";
+                    startCallTimer();
+                }
+            });
+
+            // ICE Candidate dinleme
+            const targetId = window.activeTargetFriend;
+            if (targetId) {
+                db.ref(`calls_${currentChannel}/candidates_${targetId}`).on('child_added', snapshot => {
+                    const candidateData = snapshot.val();
+                    if (candidateData && peerConnection) {
+                        peerConnection.addIceCandidate(new RTCIceCandidate(candidateData)).catch(e => {});
+                    }
+                });
+            }
+        }
+
+        function toggleMute() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                isMuted = !isMuted;
+                audioTrack.enabled = !isMuted;
+                const muteBtn = document.getElementById('mute-btn');
+                if (isMuted) {
+                    muteBtn.className = "w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center transition shadow";
+                    muteBtn.innerHTML = '<i class="fa-solid fa-microphone-slash text-base"></i>';
+                } else {
+                    muteBtn.className = "w-12 h-12 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition shadow";
+                    muteBtn.innerHTML = '<i class="fa-solid fa-microphone text-base"></i>';
+                }
+            }
+        }
+
+        function toggleCamera() {
+            if (!localStream) return;
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                isCameraOff = !isCameraOff;
+                videoTrack.enabled = !isCameraOff;
+                const cameraBtn = document.getElementById('camera-btn');
+                if (isCameraOff) {
+                    cameraBtn.className = "w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center transition shadow";
+                    cameraBtn.innerHTML = '<i class="fa-solid fa-video-slash text-base"></i>';
+                } else {
+                    cameraBtn.className = "w-12 h-12 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition shadow";
+                    cameraBtn.innerHTML = '<i class="fa-solid fa-video text-base"></i>';
+                }
+            }
+        }
+
+        function endAudioCall() {
+            stopCallTimer();
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            if (peerConnection) peerConnection.close();
+            peerConnection = null;
+            localStream = null;
+            isMuted = false;
+            isCameraOff = false;
+            callPromptShown = false;
+            db.ref(`calls_${currentChannel}`).remove();
+            
+            document.getElementById('call-modal').style.display = 'none';
+            document.getElementById('local-video').classList.add('hidden');
+            document.getElementById('remote-video').classList.add('hidden');
+        }
+
+        // --- KİŞİ & REHBER YÖNETİMİ ---
+        function openAddContactModal() {
+            initAudio();
+            document.getElementById('contact-modal').style.display = 'flex';
+        }
+
+        function closeAddContactModal() {
+            document.getElementById('contact-modal').style.display = 'none';
+        }
+
+        function openContactsBookModal() {
+            initAudio();
+            document.getElementById('contacts-book-modal').style.display = 'flex';
+            document.getElementById('contact-search-input').value = '';
+            renderContactsList();
+        }
+
+        function closeContactsBookModal() {
+            document.getElementById('contacts-book-modal').style.display = 'none';
+        }
+
+        function saveContact() {
+            const idInput = document.getElementById('friend-id-input').value.trim().toUpperCase();
+            const nameInput = document.getElementById('friend-name-input').value.trim() || idInput;
+            
+            if (idInput.length !== 4) {
+                alert("Lütfen 4 haneli geçerli bir ID girin.");
+                return;
+            }
+            if (idInput === myIdShort) {
+                alert("Kendinizi rehbere ekleyemezsiniz.");
+                return;
+            }
+
+            contacts[idInput] = nameInput;
+            localStorage.setItem('pager_contacts', JSON.stringify(contacts));
+            
+            closeAddContactModal();
+            document.getElementById('friend-id-input').value = '';
+            document.getElementById('friend-name-input').value = '';
+            
+            renderContactTabs();
+            switchChannel(`dm_${getDmKey(myIdShort, idInput)}`, nameInput, idInput);
+        }
+
+        function deleteContact(friendId, event) {
+            event.stopPropagation();
+            if (confirm(`"${contacts[friendId]}" kişisini rehberden silmek istediğinize emin misiniz?`)) {
+                delete contacts[friendId];
+                localStorage.setItem('pager_contacts', JSON.stringify(contacts));
+                renderContactTabs();
+                renderContactsList();
+                
+                if (currentChannel.includes(friendId)) {
+                    switchToGlobalChannel();
+                }
+            }
+        }
+
+        function renderContactsList(filterQuery = '') {
+            const container = document.getElementById('contacts-list-container');
+            let html = '';
+            
+            const entries = Object.entries(contacts);
+            if (entries.length === 0) {
+                container.innerHTML = `<div class="text-center text-[var(--text-muted)] py-4 text-[11px]">Rehberinizde henüz kayıtlı kişi yok.</div>`;
+                return;
+            }
+
+            const query = filterQuery.toLowerCase();
+            let count = 0;
+
+            for (const [friendId, friendName] of entries) {
+                if (query && !friendName.toLowerCase().includes(query) && !friendId.toLowerCase().includes(query)) {
+                    continue;
+                }
+                count++;
+
+                html += `
+                    <div onclick="closeContactsBookModal(); switchChannel('dm_${getDmKey(myIdShort, friendId)}', '${friendName}', '${friendId}')" 
+                         class="flex items-center justify-between p-2 rounded-xl bg-white border border-[var(--border-soft)] hover:bg-stone-50 cursor-pointer transition">
+                        <div class="flex items-center gap-2">
+                            <div class="w-7 h-7 rounded-lg bg-[var(--pastel-accent)] flex items-center justify-center font-bold text-[10px]">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="font-bold text-xs">${friendName}</span>
+                                <span class="font-mono text-[9px] text-[var(--text-muted)]">ID: ${friendId}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="deleteContact('${friendId}', event)" title="Kişiyi Sil" class="p-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 transition">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (count === 0) {
+                html = `<div class="text-center text-[var(--text-muted)] py-4 text-[11px]">Aradığınız kritere uygun kişi bulunamadı.</div>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function filterContactsList(val) {
+            renderContactsList(val);
+        }
+
+        function getDmKey(id1, id2) {
+            return [id1, id2].sort().join('_');
+        }
+
+        function renderContactTabs() {
+            const container = document.getElementById('channel-tabs');
+            let html = '';
+
+            for (const [friendId, friendName] of Object.entries(contacts)) {
+                const channelKey = `dm_${getDmKey(myIdShort, friendId)}`;
+                const isActive = currentChannel === channelKey;
+                const unreadCount = unreadMap[channelKey] || 0;
+
+                html += `
+                    <button onclick="switchChannel('${channelKey}', '${friendName}', '${friendId}')" id="tab-${channelKey}" class="px-2.5 py-1 rounded-md ${isActive ? 'bg-[var(--pastel-accent)] text-[var(--text-dark)] font-bold' : 'bg-white/80 text-[var(--text-dark)]'} text-[10px] flex items-center gap-1 border border-[var(--border-soft)] transition flex-shrink-0 relative">
+                        <i class="fa-solid fa-user text-[9px]"></i> ${friendName}
+                        ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold ml-1 animate-pulse">${unreadCount}</span>` : ''}
+                    </button>
+                `;
+            }
+
+            const globalUnread = unreadMap['GLOBAL_EMERGENCY'] || 0;
+            html += `
+                <button onclick="switchToGlobalChannel()" id="tab-GLOBAL_EMERGENCY" class="px-2.5 py-1 rounded-md ${currentChannel === 'GLOBAL_EMERGENCY' ? 'bg-red-200 text-red-900 border-red-300' : 'bg-red-50 text-red-700 border-red-200'} font-bold text-[10px] flex items-center gap-1 border transition flex-shrink-0 relative">
+                    <i class="fa-solid fa-tower-broadcast"></i> GENEL AFET (SOS)
+                    ${globalUnread > 0 ? `<span class="bg-red-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold ml-1 animate-bounce">${globalUnread}</span>` : ''}
+                </button>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function switchToGlobalChannel() {
+            initAudio();
+            currentChannel = "GLOBAL_EMERGENCY";
+            unreadMap['GLOBAL_EMERGENCY'] = 0; 
+            renderedMessageIds.clear();
+            document.getElementById('active-chat-title').innerText = "GENEL AFET FREKANSI (SOS)";
+            document.getElementById('audio-call-btn').style.display = 'none';
+            document.getElementById('video-call-btn').style.display = 'none';
+            renderContactTabs();
+            switchChannelListener("messages_GLOBAL_EMERGENCY", "GLOBAL_EMERGENCY");
+        }
+
+        function switchChannel(channelKey, titleName, friendId) {
+            initAudio();
+            currentChannel = channelKey;
+            window.activeTargetFriend = friendId; 
+            window.activeTargetFriendName = titleName;
+            unreadMap[channelKey] = 0; 
+            renderedMessageIds.clear();
+            document.getElementById('active-chat-title').innerText = titleName ? `ÖZEL HAT: ${titleName}` : "ÖZEL HAT";
+            document.getElementById('audio-call-btn').style.display = 'flex';
+            document.getElementById('video-call-btn').style.display = 'flex';
+            renderContactTabs();
+            switchChannelListener(`messages_${channelKey}`, channelKey);
+            listenForCalls();
+        }
+
+        function switchChannelListener(firebasePath, encryptionKey) {
+            document.getElementById('chat-messages').innerHTML = '';
+            if (activeListenerRef) activeListenerRef.off();
+
+            const channelOpenTime = Date.now();
+            activeListenerRef = db.ref(firebasePath);
+
+            activeListenerRef.on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                if (!msg || renderedMessageIds.has(msg.id)) return;
+                
+                renderedMessageIds.add(msg.id);
+                renderMessage(msg, encryptionKey);
+                
+                const msgTimestamp = parseInt(msg.id?.replace('msg_', '')) || 0;
+
+                if (msg.sender !== myIdShort && msgTimestamp > channelOpenTime) {
+                    playPagerAlert();
+                    const decryptedText = msg.type === 'image' ? '[Fotoğraf Alındı]' : decryptText(msg.encryptedText, encryptionKey);
+                    triggerSystemNotification(`PAGER // ${msg.sender}`, decryptedText);
+                }
+            });
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            initAudio();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            sendPayload({
+                type: 'text',
+                content: text,
+                previewText: text
+            });
+
+            input.value = '';
+        }
+
+        function sendPayload(payloadObj) {
+            const encrypted = payloadObj.type === 'text' ? encryptText(payloadObj.content, currentChannel) : payloadObj.content;
+
+            const msgObj = {
+                id: 'msg_' + Date.now(),
+                type: payloadObj.type,
+                sender: myIdShort,
+                encryptedText: encrypted,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            if (!renderedMessageIds.has(msgObj.id)) {
+                renderedMessageIds.add(msgObj.id);
+                renderMessage(msgObj, currentChannel);
+            }
+
+            db.ref(`messages_${currentChannel}`).push(msgObj);
+
+            if (currentChannel !== "GLOBAL_EMERGENCY" && window.activeTargetFriend) {
+                db.ref(`inbox_${window.activeTargetFriend}`).push({
+                    from: myIdShort,
+                    channel: currentChannel,
+                    preview: payloadObj.previewText.substring(0, 30),
+                    time: msgObj.time
+                });
+            }
+        }
+
+        function renderMessage(m, encryptionKey) {
+            const container = document.getElementById('chat-messages');
+            const isMe = m.sender === myIdShort;
+            
+            let contentHtml = '';
+            if (m.type === 'image') {
+                contentHtml = `<img src="${m.encryptedText}" class="rounded-lg max-w-full h-auto max-h-48 object-cover border border-black/10 cursor-pointer" onclick="window.open(this.src)" />`;
+            } else {
+                contentHtml = decryptText(m.encryptedText, encryptionKey);
+            }
+            
+            const msgEl = document.createElement('div');
+            msgEl.className = `flex flex-col gap-0.5 max-w-[85%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`;
+            msgEl.innerHTML = `
+                <div class="text-[9px] text-[var(--text-muted)] px-1 font-mono"><b>${m.sender}</b> ${m.time}</div>
+                <div class="px-3 py-2 rounded-xl text-xs shadow-xs border border-[var(--border-soft)] ${isMe ? 'bg-[var(--pastel-accent)] rounded-tr-none' : 'bg-white rounded-tl-none'}">
+                    ${contentHtml}
+                </div>
+            `;
+            container.appendChild(msgEl);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function initBackgroundPager() {
+            db.ref(`inbox_${myIdShort}`).on('child_added', (snapshot) => {
+                const data = snapshot.val();
+                if (!data || data.from === myIdShort) return;
+
+                if (data.channel && data.channel !== currentChannel) {
+                    unreadMap[data.channel] = (unreadMap[data.channel] || 0) + 1;
+                    renderContactTabs();
+                }
+
+                if (inboxInitialized) {
+                    playPagerAlert();
+                    triggerSystemNotification(`YENİ ÇAĞRI [${data.from}]`, data.preview || "Özel mesaj alındı.");
+                }
+            });
+
+            db.ref('messages_GLOBAL_EMERGENCY').on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                if (!msg || msg.sender === myIdShort) return;
+
+                if (globalInitialized && currentChannel !== 'GLOBAL_EMERGENCY') {
+                    unreadMap['GLOBAL_EMERGENCY'] = (unreadMap['GLOBAL_EMERGENCY'] || 0) + 1;
+                    renderContactTabs();
+                    playPagerAlert();
+                }
+            });
+        }
+
+        window.onload = () => {
+            document.getElementById('my-identity').innerText = `ID: ${myIdShort}`;
+
+            db.ref(`inbox_${myIdShort}`).once('value', () => {
+                inboxInitialized = true;
+            });
+            db.ref('messages_GLOBAL_EMERGENCY').once('value', () => {
+                globalInitialized = true;
+            });
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker Kaydedildi:', reg))
+                    .catch(err => console.error('Service Worker Kayıt Hatası:', err));
+            }
+
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            document.body.addEventListener('click', () => initAudio(), { once: true });
+            
+            initBackgroundPager();
+            renderContactTabs();
+            switchToGlobalChannel();
+        };
+    </script>
+</body>
+</html>
